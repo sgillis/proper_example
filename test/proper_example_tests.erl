@@ -35,20 +35,20 @@ keyvalue_props() ->
             kv:start_link(),
             {Hist, State, Result} = run_commands(?MODULE, Cmds),
             fmt(cmds, "~nCmds: ~p~n", [Cmds]),
+            Tables = lists:sort(kv:tables()),
             kv:stop(),
             ?WHENFAIL(
                log(Cmds, Hist, State, Result),
                conjunction(
-                 [ { result_ok
-                   , Result =:= ok
-                   }
+                 [ {result, Result =:= ok}
+                 , {tables, State#state.tables =:= Tables}
                  ]))
           end).
 
 %%%_* proper_statem ===========================================================
 
 initial_state() ->
-  #state{}.
+  #state{ tables = [] }.
 
 command(_S) ->
   PossibleActions = [ { call, ?MODULE, new_table, [table_name()] } ],
@@ -60,8 +60,8 @@ precondition(_S, {call, _Mod, _F, _Args}) ->
 postcondition(_S, {call, _Mod, _F, _Args}, _Res) ->
   true.
 
-next_state(State, _Result, {call, ?MODULE, new_table, [_Name]}) ->
-  State.
+next_state(State, _Result, {call, ?MODULE, new_table, [Name]}) ->
+  State#state{ tables = lists:sort([ Name | State#state.tables ]) }.
 
 %%%_* State transitions ========================================================
 
