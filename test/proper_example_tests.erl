@@ -17,6 +17,7 @@
 
 %% State transitions
 -export([ new_table/1
+        , new_table_existing/1
         ]).
 
 -include_lib("proper/include/proper.hrl").
@@ -54,18 +55,31 @@ keyvalue_props() ->
 initial_state() ->
   #state{ tables = [] }.
 
-command(_S) ->
-  PossibleActions = [ { call, ?MODULE, new_table, [table_name()] } ],
+command(State) ->
+  StatelessActions =
+    [ {call, ?MODULE, new_table, [table_name(State)]} ],
+  StatefulActions =
+    case State#state.tables =/= [] of
+      true ->
+        [ {call, ?MODULE, new_table_existing, [table_name_existing(State)]} ];
+      false ->
+        []
+    end,
+  PossibleActions = StatelessActions ++ StatefulActions,
   oneof(PossibleActions).
 
 precondition(_S, {call, _Mod, _F, _Args}) ->
   true.
 
 postcondition(_S, {call, _Mod, new_table, _Args}, Res) ->
-  Res =:= ok.
+  Res =:= ok;
+postcondition(_S, {call, _Mod, new_table_existing, _Args}, Res) ->
+  Res =:= {error, table_exists}.
 
 next_state(State, _Result, {call, ?MODULE, new_table, [Name]}) ->
-  State#state{ tables = lists:usort([ Name | State#state.tables ]) }.
+  State#state{ tables = lists:usort([ Name | State#state.tables ]) };
+next_state(State, _Result, {call, ?MODULE, new_table_existing, [_Name]}) ->
+  State.
 
 %%%_* State transitions ========================================================
 
@@ -73,10 +87,17 @@ new_table(Name) ->
   fmt({cmd, new_table}, "Generate new table: ~p~n", [Name]),
   kv:new_table(Name).
 
+new_table_existing(Name) ->
+  fmt({cmd, new_table}, "Generate new table: ~p~n", [Name]),
+  kv:new_table(Name).
+
 %%%_* Generators ===============================================================
 
-table_name() ->
-  atom().
+table_name(State) ->
+  ?SUCHTHAT(Atom, atom(), not lists:member(Atom, State#state.tables)).
+
+table_name_existing(State) ->
+  oneof(State#state.tables).
 
 %%%_* Logging ==================================================================
 
