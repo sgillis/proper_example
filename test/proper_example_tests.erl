@@ -27,7 +27,7 @@
 %%%_* Property tests ===========================================================
 
 run_test_() ->
-  N = 10,
+  N = 100,
   ?_assert(run_test(N)).
 
 run_test(N) ->
@@ -61,8 +61,8 @@ command(_S) ->
 precondition(_S, {call, _Mod, _F, _Args}) ->
   true.
 
-postcondition(_S, {call, _Mod, _F, _Args}, _Res) ->
-  true.
+postcondition(_S, {call, _Mod, new_table, _Args}, Res) ->
+  Res =:= ok.
 
 next_state(State, _Result, {call, ?MODULE, new_table, [Name]}) ->
   State#state{ tables = lists:usort([ Name | State#state.tables ]) }.
