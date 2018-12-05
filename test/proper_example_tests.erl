@@ -3,7 +3,9 @@
 -behaviour(proper_statem).
 
 %% Run prop tests
--export([ keyvalue_props/0 ]).
+-export([ keyvalue_props/0
+        , run_test/1
+        ]).
 
 %% proper_statem exports
 -export([ initial_state/0
@@ -26,8 +28,10 @@
 
 run_test_() ->
   N = 10,
-  ?_assert(proper:quickcheck(?MODULE:keyvalue_props(),
-                             [ {numtests, N} ])).
+  ?_assert(run_test(N)).
+
+run_test(N) ->
+  proper:quickcheck(?MODULE:keyvalue_props(), [{numtests, N}]).
 
 keyvalue_props() ->
   ?FORALL(Cmds, commands(?MODULE, initial_state()),
@@ -61,7 +65,7 @@ postcondition(_S, {call, _Mod, _F, _Args}, _Res) ->
   true.
 
 next_state(State, _Result, {call, ?MODULE, new_table, [Name]}) ->
-  State#state{ tables = lists:sort([ Name | State#state.tables ]) }.
+  State#state{ tables = lists:usort([ Name | State#state.tables ]) }.
 
 %%%_* State transitions ========================================================
 
