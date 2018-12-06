@@ -82,7 +82,7 @@ handle_call({put, TableName, Key, Value}, _From, State) ->
   FailureF = fun() -> {error, State} end,
   SuccessF =
     fun(Table) ->
-        NewTable = [{Key, Value} | Table],
+        NewTable = [{Key, Value} | lists:keydelete(Key, 1, Table)],
         {ok, lists:keyreplace(TableName, 1, State, {TableName, NewTable})}
     end,
   {Response, NewState} = table_operation(TableName, State, FailureF, SuccessF),

@@ -18,12 +18,13 @@
 %% State transitions
 -export([ new_table/1
         , new_table_existing/1
+        , put/3
         ]).
 
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--record(state, {tables}).
+-record(state, {tables, values}).
 
 %%%_* Property tests ===========================================================
 
@@ -41,19 +42,34 @@ keyvalue_props() ->
             {Hist, State, Result} = run_commands(?MODULE, Cmds),
             fmt(cmds, "~nCmds: ~p~n", [Cmds]),
             Tables = lists:sort(kv:tables()),
+            TableKeyValues = [{Table, kv:key_values(Table)} || Table <- Tables],
             kv:stop(),
             ?WHENFAIL(
                log(Cmds, Hist, State, Result),
                conjunction(
                  [ {result, Result =:= ok}
                  , {tables, State#state.tables =:= Tables}
+                 , {key_values, compare_key_values(State, TableKeyValues)}
                  ]))
           end).
+
+compare_key_values(State, TableKeyValues) ->
+  AllValues = lists:flatten(
+                [ pair_table_and_key(Table, KVs)
+                  || {Table, KVs} <- TableKeyValues ]),
+  lists:sort(State#state.values) =:= lists:sort(AllValues).
+
+pair_table_and_key(_Table, []) ->
+  [];
+pair_table_and_key(Table, [{Key, Value} | KVs]) ->
+  [{{Table, Key}, Value} | pair_table_and_key(Table, KVs)].
 
 %%%_* proper_statem ===========================================================
 
 initial_state() ->
-  #state{ tables = [] }.
+  #state{ tables = []
+        , values = []
+        }.
 
 command(State) ->
   StatelessActions =
@@ -61,7 +77,9 @@ command(State) ->
   StatefulActions =
     case State#state.tables =/= [] of
       true ->
-        [ {call, ?MODULE, new_table_existing, [table_name_existing(State)]} ];
+        [ {call, ?MODULE, new_table_existing, [table_name_existing(State)]}
+        , {call, ?MODULE, put, [table_name_existing(State), key(), value()]}
+        ];
       false ->
         []
     end,
@@ -74,12 +92,19 @@ precondition(_S, {call, _Mod, _F, _Args}) ->
 postcondition(_S, {call, _Mod, new_table, _Args}, Res) ->
   Res =:= ok;
 postcondition(_S, {call, _Mod, new_table_existing, _Args}, Res) ->
-  Res =:= {error, table_exists}.
+  Res =:= {error, table_exists};
+postcondition(_S, {call, _Mod, put, _Args}, Res) ->
+  Res =:= ok.
 
 next_state(State, _Result, {call, ?MODULE, new_table, [Name]}) ->
   State#state{ tables = lists:usort([ Name | State#state.tables ]) };
 next_state(State, _Result, {call, ?MODULE, new_table_existing, [_Name]}) ->
-  State.
+  State;
+next_state(State, _Result, {call, ?MODULE, put, [Name, Key, Value]}) ->
+  Index = {Name, Key},
+  Values = State#state.values,
+  NewValues = [{Index, Value} | lists:keydelete(Index, 1, Values)],
+  State#state{ values = NewValues }.
 
 %%%_* State transitions ========================================================
 
@@ -91,6 +116,10 @@ new_table_existing(Name) ->
   fmt({cmd, new_table}, "Generate new table: ~p~n", [Name]),
   kv:new_table(Name).
 
+put(Name, Key, Value) ->
+  fmt({cmd, put}, "Put value: ~p ~p ~p~n", [Name, Key, Value]),
+  kv:put(Name, Key, Value).
+
 %%%_* Generators ===============================================================
 
 table_name(State) ->
@@ -98,6 +127,12 @@ table_name(State) ->
 
 table_name_existing(State) ->
   oneof(State#state.tables).
+
+key() ->
+  atom().
+
+value() ->
+  int().
 
 %%%_* Logging ==================================================================
 
